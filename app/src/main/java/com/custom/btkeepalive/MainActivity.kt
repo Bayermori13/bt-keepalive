@@ -15,13 +15,25 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.custom.btkeepalive.databinding.ActivityMainBinding
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private val logBuilder = StringBuilder()
 
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    addLog("دستگاه بلوتوث متصل شد.")
+                }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
+                    addLog("دستگاه بلوتوث قطع شد!")
+                }
+            }
             updateConnectedDevice()
         }
     }
@@ -31,6 +43,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        addLog("برنامه آماده‌سازی شد.")
         requestPermissions()
         updateConnectedDevice()
 
@@ -54,14 +67,22 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     startService(intent)
                 }
-                binding.tvStatus.text = "وضعیت: محافظت فعال است (ارسال سکوت)"
-                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#00E676"))
+                binding.tvStatus.text = "وضعیت: فعال (در حال ارسال پالس امن)"
+                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
+                addLog("موتور ضد قطعی روشن شد.")
             } else {
                 stopService(intent)
                 binding.tvStatus.text = "وضعیت: غیرفعال"
-                binding.tvStatus.setTextColor(android.graphics.Color.WHITE)
+                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
+                addLog("موتور ضد قطعی خاموش شد.")
             }
         }
+    }
+
+    private fun addLog(message: String) {
+        val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+        logBuilder.append("[$timeStr] $message\n")
+        binding.tvLogs.text = logBuilder.toString()
     }
 
     private fun updateConnectedDevice() {
@@ -69,13 +90,13 @@ class MainActivity : AppCompatActivity() {
         val adapter = bluetoothManager.adapter
 
         if (adapter == null || !adapter.isEnabled) {
-            binding.tvDeviceName.text = "بلوتوث خاموش است"
+            binding.tvDeviceName.text = "بلوتوث گوشی خاموش است"
             return
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            binding.tvDeviceName.text = "نیازمند مجوز بلوتوث"
+            binding.tvDeviceName.text = "نیازمند دسترسی بلوتوث"
             return
         }
 
@@ -83,9 +104,11 @@ class MainActivity : AppCompatActivity() {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
                 val devices = proxy?.connectedDevices
                 if (!devices.isNullOrEmpty()) {
-                    binding.tvDeviceName.text = devices[0].name ?: "دستگاه بلوتوث"
+                    val name = devices[0].name ?: "ناشناس"
+                    binding.tvDeviceName.text = name
+                    addLog("شناسایی دستگاه: $name")
                 } else {
-                    binding.tvDeviceName.text = "دستگاهی وصل نیست"
+                    binding.tvDeviceName.text = "هیچ هندزفری فعالی متصل نیست"
                 }
                 adapter.closeProfileProxy(profile, proxy)
             }

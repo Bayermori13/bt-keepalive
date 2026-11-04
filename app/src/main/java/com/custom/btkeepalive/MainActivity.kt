@@ -9,9 +9,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.custom.btkeepalive.databinding.ActivityMainBinding
@@ -27,10 +33,10 @@ class MainActivity : AppCompatActivity() {
     private val bluetoothReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                BluetoothDevice.ACTION_ACL_CONNECTED -> addLog("یک دستگاه بلوتوث متصل شد.")
-                BluetoothDevice.ACTION_ACL_DISCONNECTED -> addLog("دستگاه بلوتوث قطع شد!")
+                BluetoothDevice.ACTION_ACL_CONNECTED -> addLog("اتصال موفق بلوتوث برقرار شد.")
+                BluetoothDevice.ACTION_ACL_DISCONNECTED -> addLog("ارتباط بلوتوث قطع شد!")
             }
-            scanPairedDevices()
+            scanAndRenderDevices()
         }
     }
 
@@ -39,9 +45,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        addLog("برنامه با موفقیت اجرا شد.")
+        addLog("سیستم صوتی پایدار آماده به کار است.")
         requestPermissions()
-        scanPairedDevices()
+        scanAndRenderDevices()
 
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
@@ -64,14 +70,14 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     startService(intent)
                 }
-                binding.tvStatus.text = "وضعیت: محافظت فعال (در حال ارسال پالس)"
-                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
-                addLog("موتور پایداری روشن شد.")
+                binding.tvStatus.text = "وضعیت: محافظت فعال و هوشیار"
+                binding.tvStatus.setTextColor(Color.parseColor("#38BDF8"))
+                addLog("موتور ضد قطعی روشن شد.")
             } else {
                 stopService(intent)
                 binding.tvStatus.text = "وضعیت: غیرفعال"
-                binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-                addLog("موتور پایداری خاموش شد.")
+                binding.tvStatus.setTextColor(Color.parseColor("#EF4444"))
+                addLog("موتور ضد قطعی خاموش شد.")
             }
         }
     }
@@ -82,32 +88,90 @@ class MainActivity : AppCompatActivity() {
         binding.tvLogs.text = logBuilder.toString()
     }
 
-    private fun scanPairedDevices() {
+    private fun scanAndRenderDevices() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = bluetoothManager.adapter
+        val container = binding.layoutDeviceContainer
+        container.removeAllViews()
 
         if (adapter == null || !adapter.isEnabled) {
-            binding.tvDeviceName.text = "✖ بلوتوث گوشی خاموش است."
+            addCardToContainer("خطا", "بلوتوث گوشی خاموش است", false)
             return
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            binding.tvDeviceName.text = "✖ نیازمند تایید دسترسی بلوتوث."
+            addCardToContainer("دسترسی", "نیازمند تایید دسترسی بلوتوث", false)
             return
         }
 
         val pairedDevices: Set<BluetoothDevice>? = adapter.bondedDevices
         if (!pairedDevices.isNullOrEmpty()) {
-            val sb = StringBuilder()
             for (device in pairedDevices) {
-                sb.append("🎧 نام: ${device.name ?: "ناشناس"}\n")
-                sb.append("   مک آدرس: ${device.address}\n\n")
+                val name = device.name ?: "دستگاه ناشناس"
+                val address = device.address
+                addCardToContainer(name, address, true)
             }
-            binding.tvDeviceName.text = sb.toString().trim()
+            addLog("اسکن موفق: ${pairedDevices.size} دستگاه بارگذاری شد.")
         } else {
-            binding.tvDeviceName.text = "هیچ دستگاهی ذخیره نشده است."
+            addCardToContainer("خالی", "هیچ دستگاهی ذخیره نشده است", false)
         }
+    }
+
+    private fun addCardToContainer(title: String, subtitle: String, isDevice: Boolean) {
+        val context = this
+        val card = CardView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 0, 0, 12)
+            }
+            radius = 16f
+            cardElevation = 0f
+            setCardBackgroundColor(Color.parseColor("#131C2E"))
+        }
+
+        val layout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(16, 16, 16, 16)
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val icon = ImageView(context).apply {
+            layoutParams = LinearLayout.LayoutParams(40, 40).apply {
+                setMargins(0, 0, 16, 0)
+            }
+            setImageResource(android.R.drawable.stat_sys_data_bluetooth)
+            setColorFilter(if (isDevice) Color.parseColor("#38BDF8") else Color.parseColor("#EF4444"))
+        }
+
+        val textLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        val titleTv = TextView(context).apply {
+            text = title
+            setTextColor(Color.parseColor("#FFFFFF"))
+            textSize = 15f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+
+        val subTv = TextView(context).apply {
+            text = subtitle
+            setTextColor(Color.parseColor("#64748B"))
+            textSize = 12f
+        }
+
+        textLayout.addView(titleTv)
+        textLayout.addView(subTv)
+
+        layout.addView(icon)
+        layout.addView(textLayout)
+        card.addView(layout)
+
+        binding.layoutDeviceContainer.addView(card)
     }
 
     private fun requestPermissions() {

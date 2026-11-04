@@ -1,9 +1,9 @@
 package com.custom.btkeepalive
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -28,13 +28,19 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                    addLog("دستگاه بلوتوث متصل شد.")
+                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                    }
+                    addLog("دستگاه متصل شد: ${device?.name ?: "ناشناس"}")
                 }
                 BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                    addLog("دستگاه بلوتوث قطع شد!")
+                    addLog("یک دستگاه بلوتوث قطع شد!")
                 }
             }
-            updateConnectedDevice()
+            scanPairedDevices()
         }
     }
 
@@ -43,13 +49,14 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        addLog("برنامه آماده‌سازی شد.")
+        addLog("برنامه اجرا شد.")
         requestPermissions()
-        updateConnectedDevice()
+        scanPairedDevices()
 
         val filter = IntentFilter().apply {
             addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
             addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
         }
         
         ContextCompat.registerReceiver(
@@ -67,7 +74,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     startService(intent)
                 }
-                binding.tvStatus.text = "وضعیت: فعال (در حال ارسال پالس امن)"
+                binding.tvStatus.text = "وضعیت: محافظت فعال و در حال ارسال پالس"
                 binding.tvStatus.setTextColor(android.graphics.Color.parseColor("#38BDF8"))
                 addLog("موتور ضد قطعی روشن شد.")
             } else {
@@ -85,7 +92,7 @@ class MainActivity : AppCompatActivity() {
         binding.tvLogs.text = logBuilder.toString()
     }
 
-    private fun updateConnectedDevice() {
+    private fun scanPairedDevices() {
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         val adapter = bluetoothManager.adapter
 
@@ -100,21 +107,18 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        adapter.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
-                val devices = proxy?.connectedDevices
-                if (!devices.isNullOrEmpty()) {
-                    val name = devices[0].name ?: "ناشناس"
-                    binding.tvDeviceName.text = name
-                    addLog("شناسایی دستگاه: $name")
-                } else {
-                    binding.tvDeviceName.text = "هیچ هندزفری فعالی متصل نیست"
-                }
-                adapter.closeProfileProxy(profile, proxy)
+        val pairedDevices: Set<BluetoothDevice>? = adapter.bondedDevices
+        if (!pairedDevices.isNullOrEmpty()) {
+            val deviceListStr = StringBuilder()
+            for (device in pairedDevices) {
+                deviceListStr.append("• ${device.name ?: "دستگاه ناشناس"} (${device.address})\n")
             }
-
-            override fun onServiceDisconnected(profile: Int) {}
-        }, BluetoothProfile.A2DP)
+            binding.tvDeviceName.text = "دستگاه‌های جفت‌شده:\n$deviceListStr"
+            addLog("اسکن دستگاه‌های بلوتوث انجام شد (${pairedDevices.size} دستگاه یافت شد).")
+        } else {
+            binding.tvDeviceName.text = "هیچ دستگاه بلوتوثی ذخیره نشده است"
+            addLog("هیچ دستگاه بلوتوثی یافت نشد.")
+        }
     }
 
     private fun requestPermissions() {
